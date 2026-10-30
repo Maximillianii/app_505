@@ -12,7 +12,6 @@ Number = int | float
 
 
 def stupid_sort(a: list[Number]) -> tuple[list[Number], int, int]:
-    """Время O(n^3) в худшем случае, дополнительная память O(1)."""
     comparisons = swaps = 0
     i = 0
     while i < len(a) - 1:
@@ -27,7 +26,6 @@ def stupid_sort(a: list[Number]) -> tuple[list[Number], int, int]:
 
 
 def bubble_sort(a: list[Number]) -> tuple[list[Number], int, int]:
-    """Время O(n) в лучшем и O(n^2) в худшем случае, память O(1)."""
     comparisons = swaps = 0
     for end in range(len(a) - 1, 0, -1):
         changed = False
@@ -43,7 +41,6 @@ def bubble_sort(a: list[Number]) -> tuple[list[Number], int, int]:
 
 
 def quick_sort(a: list[Number]) -> tuple[list[Number], int, int]:
-    """Ломуто: среднее O(n log n), худшее O(n^2), стек O(log n) в среднем."""
     comparisons = swaps = 0
     stack = [(0, len(a) - 1)]
     while stack:
@@ -74,7 +71,6 @@ def quick_sort(a: list[Number]) -> tuple[list[Number], int, int]:
 
 
 def prepare_gpu(values: list[Number], cp):
-    """Переносит массив в видеопамять и дополняет его до степени двойки."""
     integers = all(type(x) is int for x in values)
     if integers and any(x < -(2**63) or x >= 2**63 for x in values):
         raise ValueError("Для GPU целые числа должны помещаться в int64")
@@ -121,7 +117,6 @@ def get_gpu_kernel(dtype: str):
 
 
 def bitonic_gpu(a, cp, kernel):
-    """GPU: O(n log^2 n), additional memory O(n)."""
     n = len(a)
     swaps = cp.zeros(1, dtype=cp.uint64)
     comparisons = 0
