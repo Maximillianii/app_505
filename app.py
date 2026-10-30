@@ -1,5 +1,7 @@
 import streamlit as st 
 
+st.sidebar.page_link("pages/sorts.py", label="Работа_Максима_Копылова")
+st.sidebar.page_link("app.py", label="Home")
 st.title(':red[Hello, world!]')
 
 st.markdown(
