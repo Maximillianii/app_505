@@ -2,7 +2,7 @@ import math
 import random
 import statistics
 import time
-import cupy as cp
+
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -135,6 +135,7 @@ def run_sort(name: str, values: list[Number]):
         return result, comparisons, swaps, elapsed
 
     try:
+        import cupy as cp
         if cp.cuda.runtime.getDeviceCount() < 1:
             raise RuntimeError("CUDA-видеокарта не обнаружена")
     except ImportError as error:
