@@ -1,8 +1,8 @@
 import math
-from functools import lru_cache
 import random
 import statistics
 import time
+import cupy as cp
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -88,51 +88,42 @@ def prepare_gpu(values: list[Number], cp):
     return a
 
 
-@lru_cache(maxsize=2)
-def get_gpu_kernel(dtype: str):
-    import cupy as cp
-
-    scalar = "long long" if dtype == "int64" else "double"
-    code = """
-    extern "C" __global__
-    void bitonic(TYPE* a, unsigned long long* swaps,
-                 int n, int size, int step) {
-        int pair = blockIdx.x * blockDim.x + threadIdx.x;
-        if (pair >= n / 2) return;
-
-        int i = (pair / step) * (2 * step) + pair % step;
-        int j = i + step;
-        TYPE x = a[i];
-        TYPE y = a[j];
-        bool ascending = (i & size) == 0;
-
-        if ((ascending && x > y) || (!ascending && x < y)) {
-            a[i] = y;
-            a[j] = x;
-            atomicAdd(swaps, 1ULL);
-        }
-    }
-    """.replace("TYPE", scalar)
-    return cp.RawKernel(code, "bitonic")
-
-
-def bitonic_gpu(a, cp, kernel):
+def bitonic_gpu(a, cp):
     n = len(a)
-    swaps = cp.zeros(1, dtype=cp.uint64)
+    ids = cp.arange(n)
     comparisons = 0
-    blocks = (n // 2 + 255) // 256
+    swaps = cp.zeros((), dtype=cp.int64)
 
     size = 2
+
     while size <= n:
         step = size // 2
+
         while step:
-            kernel((blocks,), (256,),
-                   (a, swaps, cp.int32(n), cp.int32(size), cp.int32(step)))
+            other = a[ids ^ step]
+
+            take_min = ((ids & size) == 0) == ((ids & step) == 0)
+
+            new_a = cp.where(
+                take_min,
+                cp.minimum(a, other),
+                cp.maximum(a, other)
+            )
+
+            swaps += cp.count_nonzero(new_a != a) // 2
             comparisons += n // 2
+
+            a = new_a
             step //= 2
+
         size *= 2
 
-    return a, comparisons, swaps
+    return a, comparisons, int(swaps.get())
+
+
+SORTS = {"Глупая": stupid_sort, "Пузырёк": bubble_sort, "QuickSort": quick_sort}
+NAMES = list(SORTS) + ["Bitonic GPU"]
+DISTRIBUTIONS = ["Случайный", "Отсортированный", "Обратный", "Почти отсортированный", "Дубликаты"]
 
 
 def run_sort(name: str, values: list[Number]):
@@ -144,20 +135,17 @@ def run_sort(name: str, values: list[Number]):
         return result, comparisons, swaps, elapsed
 
     try:
-        import cupy as cp
         if cp.cuda.runtime.getDeviceCount() < 1:
             raise RuntimeError("CUDA-видеокарта не обнаружена")
     except ImportError as error:
         raise RuntimeError("Для GPU нужен CuPy и видеокарта NVIDIA") from error
     a = prepare_gpu(values, cp)
-    kernel = get_gpu_kernel("int64" if a.dtype == cp.int64 else "float64")
-    kernel.compile()
     cp.cuda.get_current_stream().synchronize()
     start = time.perf_counter()
-    result, comparisons, swaps = bitonic_gpu(a, cp, kernel)
+    result, comparisons, swaps = bitonic_gpu(a, cp)
     cp.cuda.get_current_stream().synchronize()
     elapsed = (time.perf_counter() - start) * 1000
-    return cp.asnumpy(result[:len(values)]).tolist(), comparisons, int(swaps.item()), elapsed
+    return cp.asnumpy(result[:len(values)]).tolist(), comparisons, swaps, elapsed
 
 
 def generate(n: int, kind: str, seed: int) -> list[int]:
@@ -235,9 +223,7 @@ def bubble_frames(values: list[int]):
     return frames
 
 
-SORTS = {"Глупая": stupid_sort, "Пузырёк": bubble_sort, "QuickSort": quick_sort}
-NAMES = list(SORTS) + ["Bitonic GPU"]
-DISTRIBUTIONS = ["Случайный", "Отсортированный", "Обратный", "Почти отсортированный", "Дубликаты"]
+
 
 st.set_page_config(page_title="Sorting Lab", layout="wide")
 st.sidebar.page_link("app.py", label="Home")
